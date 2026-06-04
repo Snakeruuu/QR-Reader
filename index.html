@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure QR Text Share</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f5f7fb;
+            color: #333;
+            padding: 20px;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            width: 100%;
+            max-width: 450px;
+            box-sizing: border-box;
+        }
+        h2 { margin-top: 0; color: #1a1a1a; font-size: 24px; }
+        label { display: block; margin: 12px 0 6px; font-weight: 600; font-size: 14px; color: #555; }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+            background: #fafafa;
+        }
+        input:focus, textarea:focus { background: #fff; border-color: #0070f3; outline: none; }
+        button {
+            width: 100%;
+            background: #0070f3;
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background 0.2s;
+        }
+        button:hover { background: #0051cb; }
+        #qr-container { display: flex; flex-direction: column; align-items: center; margin-top: 20px; }
+        #qrcode { margin: 15px 0; }
+        .hidden { display: none !important; }
+        .encrypted-box {
+            background: #f1f3f5;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+            max-height: 60px;
+            overflow-y: auto;
+            color: #666;
+        }
+        .highlight { background-color: yellow; color: black; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div id="creator-view">
+        <h2>Create Encrypted QR</h2>
+        <p style="color:#666; font-size:14px;">Input your editable text below, set a password, and scan the generated QR code.</p>
+        
+        <label for="input-text">Your Editable Text</label>
+        <textarea id="input-text" rows="5" placeholder="Type or paste your searchable text here..."></textarea>
+        
+        <label for="encrypt-password">Set Decryption Password</label>
+        <input type="password" id="encrypt-password" placeholder="Enter a secret password">
+        
+        <button onclick="generateSecureQR()">Generate Secure QR Code</button>
+        
+        <div id="qr-container" class="hidden">
+            <div id="qrcode"></div>
+            <p style="font-size: 12px; color: #888; text-align: center;">Scan this with your phone camera to view and decrypt the text.</p>
+        </div>
+    </div>
+
+    <div id="viewer-view" class="hidden">
+        <h2>Secure Text Found</h2>
+        <p>This data is encrypted. Enter the password to read and search it.</p>
+        
+        <label>Raw Encrypted Data:</label>
+        <div id="raw-cipher" class="encrypted-box"></div>
+        
+        <label for="decrypt-password">Enter Password</label>
+        <input type="password" id="decrypt-password" placeholder="Type password here...">
+        <button onclick="decryptPayload()">Decrypt Data</button>
+        
+        <div id="decrypted-content" class="hidden" style="margin-top: 20px; border-top: 2px solid #eee; padding-top: 15px;">
+            <label for="search-box">🔍 Search Content:</label>
+            <input type="text" id="search-box" oninput="searchDecryptedText()" placeholder="Type to search/filter text...">
+            
+            <label style="margin-top: 15px;">Decrypted Text:</label>
+            <div id="main-text" style="background: #fff; border: 1px solid #ddd; padding: 15px; border-radius: 8px; white-space: pre-wrap; max-height: 250px; overflow-y: auto;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // On load, check if the URL contains encrypted data parameters
+    window.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const cipherData = urlParams.get('data');
+        
+        if (cipherData) {
+            // Switch to phone viewer mode if data exists in URL
+            document.getElementById('creator-view').classList.add('hidden');
+            document.getElementById('viewer-view').classList.remove('hidden');
+            document.getElementById('raw-cipher').innerText = cipherData;
+        }
+    });
+
+    // Function to encrypt text and generate the QR code embedding the URL
+    function generateSecureQR() {
+        const text = document.getElementById('input-text').value;
+        const password = document.getElementById('encrypt-password').value;
+        const qrDiv = document.getElementById('qrcode');
+        
+        if (!text || !password) {
+            alert("Please fill out both the editable text and the password field.");
+            return;
+        }
+
+        // 1. Encrypt your text using AES
+        const ciphertext = CryptoJS.AES.encrypt(text, password).toString();
+        
+        // 2. Encode ciphertext so it fits cleanly in a URL parameter
+        const safeCiphertext = encodeURIComponent(ciphertext);
+        
+        // 3. Build a link pointing back to this exact website, but carrying the encrypted text
+        const baseWebUrl = window.location.href.split('?')[0];
+        const finalUrlWithData = `${baseWebUrl}?data=${safeCiphertext}`;
+        
+        // 4. Generate the QR code pointing to that URL
+        qrDiv.innerHTML = "";
+        new QRCode(qrDiv, {
+            text: finalUrlWithData,
+            width: 220,
+            height: 220,
+            correctLevel: QRCode.CorrectLevel.L
+        });
+        
+        document.getElementById('qr-container').classList.remove('hidden');
+    }
+
+    let globallyDecryptedText = "";
+
+    // Function executed on the phone to turn ciphertext back into readable text
+    function decryptPayload() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const cipherData = decodeURIComponent(urlParams.get('data'));
+        const password = document.getElementById('decrypt-password').value;
+        
+        try {
+            const bytes = CryptoJS.AES.decrypt(cipherData, password);
+            globallyDecryptedText = bytes.toString(CryptoJS.enc.Utf8);
+            
+            if (globallyDecryptedText) {
+                document.getElementById('decrypted-content').classList.remove('hidden');
+                document.getElementById('main-text').innerText = globallyDecryptedText;
+            } else {
+                alert("Incorrect password. Please try again.");
+            }
+        } catch(e) {
+            alert("Failed to decrypt. Double check your password.");
+        }
+    }
+
+    // Function allowing the user to search/highlight text inside the decrypted content
+    function searchDecryptedText() {
+        const searchVal = document.getElementById('search-box').value.toLowerCase();
+        const outputBox = document.getElementById('main-text');
+        
+        if (!searchVal) {
+            outputBox.innerText = globallyDecryptedText;
+            return;
+        }
+        
+        // Simple regex escape and replacement logic to visually highlight search queries
+        const escapedSearchVal = searchVal.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const regex = new RegExp(`(${escapedSearchVal})`, 'gi');
+        
+        // Apply highlighting safely via innerHTML using text content mutations
+        const safeText = globallyDecryptedText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const highlightedText = safeText.replace(regex, '<span class="highlight">$1</span>');
+        outputBox.innerHTML = highlightedText;
+    }
+</script>
+
+</body>
+</html>
